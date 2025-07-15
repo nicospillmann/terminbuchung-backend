@@ -5,7 +5,7 @@ const path = require('path');
 const ExcelJS = require('exceljs');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000; // 💡 WICHTIG: Anpassung für Render
 
 app.use(cors());
 app.use(express.json());
@@ -104,7 +104,7 @@ app.get('/admin/bookings', (req, res) => {
   });
 });
 
-// Excel-Export mit deutschem Datumsformat
+// Excel-Export
 app.get('/admin/bookings/export', async (req, res) => {
   const query = `
     SELECT 
@@ -132,7 +132,6 @@ app.get('/admin/bookings/export', async (req, res) => {
       { header: 'Buchungszeit', key: 'createdAt', width: 22 }
     ];
 
-    // Zeitformatierung: "DD.MM.YYYY HH:mm:ss"
     function formatGermanDate(dateString) {
       const d = new Date(dateString);
       const pad = n => n.toString().padStart(2, '0');
@@ -166,7 +165,7 @@ app.get('/admin/bookings/export', async (req, res) => {
   });
 });
 
-// Slot hinzufügen (Einzelslot mit Anzahl)
+// Slot hinzufügen
 app.post('/add-slot', (req, res) => {
   const { datetime, count } = req.body;
   const slotCount = parseInt(count) || 1;
@@ -183,7 +182,7 @@ app.post('/add-slot', (req, res) => {
   });
 });
 
-// Serientermine mit Mehrfachslots
+// Serientermine
 app.post('/add-series', (req, res) => {
   const { startDate, time, days, count } = req.body;
   if (!startDate || !time || !days || !count) return res.status(400).json({ message: 'Ungültige Daten' });
@@ -204,7 +203,7 @@ app.post('/add-series', (req, res) => {
   });
 });
 
-// Slots löschen (inkl. Buchungen zu diesen Slots)
+// Slots löschen
 app.post('/admin/delete', (req, res) => {
   const { ids } = req.body;
   if (!ids || !Array.isArray(ids)) {
@@ -225,7 +224,7 @@ app.post('/admin/delete', (req, res) => {
   });
 });
 
-// Server starten
+// 🟢 Server starten
 app.listen(PORT, () => {
-  console.log(`🚀 Server läuft auf http://localhost:${PORT}`);
+  console.log(`🚀 Server läuft auf Port ${PORT}`);
 });
