@@ -18,11 +18,11 @@ const adminAuth = basicAuth({
   unauthorizedResponse: (req) => 'Zugriff verweigert – Adminbereich geschützt.',
 });
 
-// 🔐 Nur Admin-Zugriff für diese Routen
-app.use(['/admin', '/admin.html', '/admin-table.html', '/admin-view.html', '/admin/bookings', '/admin/slots', '/admin/bookings/export', '/admin/delete', '/add-slot', '/add-series'], adminAuth);
-
 // Öffentliche statische Dateien (z. B. index.html, script.js, style.css)
 app.use(express.static(path.join(__dirname, 'public')));
+
+// 🔐 Nur Admin-Zugriff für diese Routen
+app.use(['/admin', '/admin.html', '/admin-table.html', '/admin-view.html', '/admin/bookings', '/admin/slots', '/admin/bookings/export', '/admin/delete', '/add-slot', '/add-series'], adminAuth);
 
 // 📦 SQLite DB-Verbindung
 const db = new sqlite3.Database('./database.sqlite', (err) => {
