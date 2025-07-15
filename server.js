@@ -22,7 +22,17 @@ const adminAuth = basicAuth({
 });
 
 // 🔐 Nur Admin-Zugriff für diese Routen
-app.use(['/admin.html', '/admin-table.html', '/admin-view.html', '/admin/bookings', '/admin/slots', '/admin/bookings/export', '/admin/delete', '/add-slot', '/add-series'], adminAuth);
+app.use([
+  '/admin.html',
+  '/admin-table.html',
+  '/admin-view.html',
+  '/admin/bookings',
+  '/admin/slots',
+  '/admin/bookings/export',
+  '/admin/delete',
+  '/add-slot',
+  '/add-series'
+], adminAuth);
 
 // 📦 SQLite DB-Verbindung
 const db = new sqlite3.Database('./database.sqlite', (err) => {
