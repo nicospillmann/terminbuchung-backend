@@ -19,9 +19,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     bookingSection.classList.remove('hidden');
   };
 
-  // Lade Slots vom Server
+  // Lade nur freie Slots vom Server
   async function loadSlots() {
-    const response = await fetch('/admin/slots'); // enthält ALLE Slots (frei & gebucht)
+    const response = await fetch('/api/slots'); // ✅ Öffentliche Route ohne Auth
     const slots = await response.json();
 
     // Tabelle leeren

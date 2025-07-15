@@ -11,18 +11,18 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// 🔐 Admin-Login konfigurieren
-const adminAuth = basicAuth({
-  users: { 'ksanispl': 'Katana@1998' }, // <== Benutzername & Passwort
-  challenge: true,
-  unauthorizedResponse: (req) => 'Zugriff verweigert – Adminbereich geschützt.',
-});
-
-// Öffentliche statische Dateien (z. B. index.html, script.js, style.css)
+// 📁 Öffentlich zugängliche Dateien (index.html, script.js, style.css etc.)
 app.use(express.static(path.join(__dirname, 'public')));
 
+// 🔐 Admin-Login konfigurieren
+const adminAuth = basicAuth({
+  users: { 'ksanispl': 'Katana@1998' },
+  challenge: true,
+  unauthorizedResponse: () => 'Zugriff verweigert – Adminbereich geschützt.',
+});
+
 // 🔐 Nur Admin-Zugriff für diese Routen
-app.use(['/admin', '/admin.html', '/admin-table.html', '/admin-view.html', '/admin/bookings', '/admin/slots', '/admin/bookings/export', '/admin/delete', '/add-slot', '/add-series'], adminAuth);
+app.use(['/admin.html', '/admin-table.html', '/admin-view.html', '/admin/bookings', '/admin/slots', '/admin/bookings/export', '/admin/delete', '/add-slot', '/add-series'], adminAuth);
 
 // 📦 SQLite DB-Verbindung
 const db = new sqlite3.Database('./database.sqlite', (err) => {
