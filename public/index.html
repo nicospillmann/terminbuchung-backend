@@ -175,7 +175,7 @@
 
     async function loadSlots() {
       try {
-        const response = await fetch('/admin/slots');
+        const response = await fetch('/api/slots'); // ✅ Öffentlich, kein Login nötig
         if (!response.ok) throw new Error('Fehler beim Laden der Slots');
         const slots = await response.json();
 
