@@ -3,20 +3,34 @@ const sqlite3 = require('sqlite3').verbose();
 const cors = require('cors');
 const path = require('path');
 const ExcelJS = require('exceljs');
+const basicAuth = require('express-basic-auth');
 
 const app = express();
-const PORT = process.env.PORT || 3000; // 💡 WICHTIG: Anpassung für Render
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// 🔐 Admin-Login konfigurieren
+const adminAuth = basicAuth({
+  users: { 'ksanispl': 'Katana@1998' }, // <== Benutzername & Passwort
+  challenge: true,
+  unauthorizedResponse: (req) => 'Zugriff verweigert – Adminbereich geschützt.',
+});
+
+// 🔐 Nur Admin-Zugriff für diese Routen
+app.use(['/admin', '/admin.html', '/admin-table.html', '/admin-view.html', '/admin/bookings', '/admin/slots', '/admin/bookings/export', '/admin/delete', '/add-slot', '/add-series'], adminAuth);
+
+// Öffentliche statische Dateien (z. B. index.html, script.js, style.css)
 app.use(express.static(path.join(__dirname, 'public')));
 
+// 📦 SQLite DB-Verbindung
 const db = new sqlite3.Database('./database.sqlite', (err) => {
   if (err) console.error('❌ Fehler bei DB-Verbindung:', err.message);
   else console.log('✅ Verbunden mit SQLite-Datenbank');
 });
 
-// Datenbank initialisieren
+// Tabellen anlegen + Dummy-Slots
 db.serialize(() => {
   db.run(`
     CREATE TABLE IF NOT EXISTS slots (
@@ -25,7 +39,6 @@ db.serialize(() => {
       booked INTEGER DEFAULT 0
     )
   `);
-
   db.run(`
     CREATE TABLE IF NOT EXISTS bookings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,7 +65,7 @@ db.serialize(() => {
   });
 });
 
-// Verfügbare Slots
+// Öffentliche API: Verfügbare Slots
 app.get('/api/slots', (req, res) => {
   db.all("SELECT * FROM slots WHERE booked = 0", (err, rows) => {
     if (err) return res.status(500).json({ error: 'Fehler beim Abrufen' });
@@ -60,7 +73,7 @@ app.get('/api/slots', (req, res) => {
   });
 });
 
-// Slot buchen
+// Buchung eines Slots
 app.post('/api/book', (req, res) => {
   const { slotId, name, email, phone, height, weight } = req.body;
 
@@ -182,7 +195,7 @@ app.post('/add-slot', (req, res) => {
   });
 });
 
-// Serientermine
+// Serientermine hinzufügen
 app.post('/add-series', (req, res) => {
   const { startDate, time, days, count } = req.body;
   if (!startDate || !time || !days || !count) return res.status(400).json({ message: 'Ungültige Daten' });
@@ -224,7 +237,7 @@ app.post('/admin/delete', (req, res) => {
   });
 });
 
-// 🟢 Server starten
+// Server starten
 app.listen(PORT, () => {
   console.log(`🚀 Server läuft auf Port ${PORT}`);
 });
