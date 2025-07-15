@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Adminbereich – Slot hinzufügen</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <h1>Adminbereich – Slot hinzufügen</h1>
+
+  <!-- Einzelslot hinzufügen -->
+  <label for="slotDateTime">Datum & Uhrzeit:</label>
+  <input type="datetime-local" id="slotDateTime" />
+
+  <label for="slotCount">Anzahl Slots:</label>
+  <select id="slotCount">
+    <option value="1">1 Slot</option>
+    <option value="2">2 Slots</option>
+    <option value="3">3 Slots</option>
+  </select>
+
+  <button onclick="addSlot()">Slot(s) hinzufügen</button>
+
+  <hr />
+
+  <!-- Serientermine hinzufügen -->
+  <h2>Serientermine hinzufügen</h2>
+  <label for="seriesStartDate">Startdatum:</label>
+  <input type="date" id="seriesStartDate" />
+
+  <label for="seriesTime">Uhrzeit:</label>
+  <input type="time" id="seriesTime" />
+
+  <label for="seriesDays">Anzahl Tage:</label>
+  <input type="number" id="seriesDays" min="1" />
+
+  <label for="seriesCount">Anzahl Slots pro Tag:</label>
+  <select id="seriesCount">
+    <option value="1">1 Slot</option>
+    <option value="2">2 Slots</option>
+    <option value="3">3 Slots</option>
+  </select>
+
+  <button onclick="addSeriesSlots()">Serientermine erstellen</button>
+
+  <br /><br />
+
+  <a href="/admin-table.html">
+    <button class="btn btn-secondary">📋 Zur Terminübersicht</button>
+  </a>
+
+  <button class="btn btn-secondary" onclick="downloadExcel()">📥 Excel-Datei herunterladen</button>
+
+  <script>
+    async function addSlot() {
+      const dateTime = document.getElementById("slotDateTime").value;
+      const count = parseInt(document.getElementById("slotCount").value);
+
+      if (!dateTime) return alert("Bitte Datum und Uhrzeit angeben.");
+
+      const response = await fetch("/add-slot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ datetime: dateTime, count }),
+      });
+
+      if (response.ok) {
+        alert(`${count} Slot(s) wurden hinzugefügt!`);
+        document.getElementById("slotDateTime").value = "";
+        document.getElementById("slotCount").value = "1";
+      } else {
+        alert("Fehler beim Hinzufügen der Slots.");
+      }
+    }
+
+    async function addSeriesSlots() {
+      const startDate = document.getElementById("seriesStartDate").value;
+      const time = document.getElementById("seriesTime").value;
+      const days = parseInt(document.getElementById("seriesDays").value);
+      const count = parseInt(document.getElementById("seriesCount").value);
+
+      if (!startDate || !time || isNaN(days) || days < 1) {
+        return alert("Bitte alle Felder korrekt ausfüllen.");
+      }
+
+      const response = await fetch("/add-series", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startDate, time, days, count }),
+      });
+
+      if (response.ok) {
+        alert("Serientermine wurden hinzugefügt!");
+        document.getElementById("seriesStartDate").value = "";
+        document.getElementById("seriesTime").value = "";
+        document.getElementById("seriesDays").value = "";
+        document.getElementById("seriesCount").value = "1";
+      } else {
+        alert("Fehler beim Hinzufügen der Serientermine.");
+      }
+    }
+
+    function downloadExcel() {
+      const link = document.createElement("a");
+      link.href = "/admin/bookings/export";
+      link.download = "buchungen.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  </script>
+</body>
+</html>

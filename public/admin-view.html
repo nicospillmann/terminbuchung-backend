@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Admin – Terminübersicht</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <h1>Terminübersicht (Admin)</h1>
+
+  <button onclick="goBack()">← Zurück</button>
+  <button onclick="deleteSelected()">Ausgewählte löschen</button>
+
+  <table id="slotsTable">
+    <thead>
+      <tr>
+        <th>✔</th>
+        <th>ID</th>
+        <th>Datum</th>
+        <th>Uhrzeit</th>
+        <th>Gebucht</th>
+        <th>Vorname</th>
+        <th>Nachname</th>
+        <th>E-Mail</th>
+        <th>Telefon</th>
+        <th>Größe</th>
+        <th>Gewicht</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    async function fetchSlots() {
+      const res = await fetch('/admin/slots');
+      const slots = await res.json();
+      const tbody = document.querySelector('#slotsTable tbody');
+      tbody.innerHTML = '';
+
+      slots.forEach(slot => {
+        const tr = document.createElement('tr');
+        const datetime = new Date(slot.datetime);
+        const datum = datetime.toLocaleDateString();
+        const uhrzeit = datetime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        tr.innerHTML = `
+          <td><input type="checkbox" value="${slot.id}" /></td>
+          <td>${slot.id}</td>
+          <td>${datum}</td>
+          <td>${uhrzeit}</td>
+          <td>${slot.booked ? '✅' : '❌'}</td>
+          <td>${slot.firstName || ''}</td>
+          <td>${slot.lastName || ''}</td>
+          <td>${slot.email || ''}</td>
+          <td>${slot.phone || ''}</td>
+          <td>${slot.height || ''}</td>
+          <td>${slot.weight || ''}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function deleteSelected() {
+      const checked = [...document.querySelectorAll('input[type="checkbox"]:checked')];
+      const ids = checked.map(cb => parseInt(cb.value));
+      if (ids.length === 0) return alert('Bitte mindestens einen Termin auswählen.');
+
+      const confirmed = confirm(`${ids.length} Termin(e) löschen?`);
+      if (!confirmed) return;
+
+      await fetch('/admin/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids })
+      });
+
+      fetchSlots();
+    }
+
+    function goBack() {
+      window.location.href = "admin.html";
+    }
+
+    fetchSlots();
+  </script>
+</body>
+</html>

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Terminübersicht</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background-color: #f9f9f9;
+    }
+    h1 {
+      color: #2c3e50;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      padding: 12px;
+      border: 1px solid #ddd;
+      text-align: left;
+    }
+    th {
+      background-color: #f2f2f2;
+    }
+    button {
+      background-color: #3498db;
+      color: white;
+      border: none;
+      padding: 6px 10px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    button:hover {
+      background-color: #2980b9;
+    }
+    a {
+      display: inline-block;
+      margin-top: 20px;
+      text-decoration: none;
+      color: #6c2dc7;
+      font-weight: bold;
+    }
+    .bulk-delete-btn {
+      margin-top: 20px;
+      background-color: #e74c3c;
+    }
+    .bulk-delete-btn:hover {
+      background-color: #c0392b;
+    }
+  </style>
+</head>
+<body>
+  <h1>📋 Terminübersicht</h1>
+
+  <table id="slotTable">
+    <thead>
+      <tr>
+        <th><input type="checkbox" id="selectAll" onclick="toggleAll(this)" /></th>
+        <th>Datum & Uhrzeit</th>
+        <th>Aktion</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Slots werden hier dynamisch geladen -->
+    </tbody>
+  </table>
+
+  <button class="bulk-delete-btn" onclick="deleteSelected()">🗑️ Ausgewählte löschen</button>
+
+  <br />
+  <a href="/admin.html">🔙 Zurück zum Adminbereich</a>
+
+  <script>
+    async function loadSlots() {
+      try {
+        const response = await fetch('/admin/slots');
+        if (!response.ok) throw new Error('Fehler beim Abrufen der Slots');
+        const slots = await response.json();
+
+        const tbody = document.querySelector('#slotTable tbody');
+        tbody.innerHTML = '';
+
+        if (slots.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="3">Keine Termine gefunden.</td></tr>';
+          return;
+        }
+
+        slots.forEach(slot => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><input type="checkbox" class="slot-checkbox" value="${slot.id}" /></td>
+            <td>${new Date(slot.datetime).toLocaleString()}</td>
+            <td><button onclick="deleteSlot(${slot.id})">🗑️ Löschen</button></td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (error) {
+        alert("Fehler beim Laden der Termine.");
+        console.error(error);
+      }
+    }
+
+    async function deleteSlot(id) {
+      if (!confirm("Diesen Termin wirklich löschen?")) return;
+
+      try {
+        const response = await fetch('/admin/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: [id] })
+        });
+
+        if (!response.ok) throw new Error('Fehler beim Löschen');
+
+        loadSlots();
+      } catch (error) {
+        alert("Fehler beim Löschen.");
+        console.error(error);
+      }
+    }
+
+    async function deleteSelected() {
+      const checkboxes = document.querySelectorAll('.slot-checkbox:checked');
+      const ids = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+      if (ids.length === 0) {
+        return alert("Bitte mindestens einen Termin auswählen.");
+      }
+
+      if (!confirm(`Möchtest du wirklich ${ids.length} Termine löschen?`)) return;
+
+      try {
+        const response = await fetch('/admin/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids })
+        });
+
+        if (!response.ok) throw new Error('Fehler beim Löschen');
+
+        loadSlots();
+      } catch (error) {
+        alert("Fehler beim Löschen.");
+        console.error(error);
+      }
+    }
+
+    function toggleAll(source) {
+      const checkboxes = document.querySelectorAll('.slot-checkbox');
+      checkboxes.forEach(cb => cb.checked = source.checked);
+    }
+
+    loadSlots();
+  </script>
+</body>
+</html>
