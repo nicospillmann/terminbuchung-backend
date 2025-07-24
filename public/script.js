@@ -1,120 +1,194 @@
-document.addEventListener('DOMContentLoaded', async () => {
-  const tableContainer = document.getElementById('slotTableContainer');
-  const calendarContainer = document.getElementById('calendarContainer');
-  const tableBody = document.getElementById('slotTableBody');
+const express = require('express');
+const sqlite3 = require('sqlite3').verbose();
+const cors = require('cors');
+const path = require('path');
+const ExcelJS = require('exceljs');
+const basicAuth = require('express-basic-auth');
 
-  const bookingSection = document.getElementById('bookingSection');
-  const bookingForm = document.getElementById('bookingForm');
-  const backButton = document.getElementById('backButton');
-  const status = document.getElementById('status');
+const app = express();
+const PORT = process.env.PORT || 3000; // ✅ Render-kompatibel
 
-  const toggleTableBtn = document.getElementById('toggleTable');
-  const toggleCalendarBtn = document.getElementById('toggleCalendar');
+app.use(cors());
+app.use(express.json());
 
-  // Buchungs-Formular anzeigen
-  window.showBookingForm = function (slotId) {
-    document.getElementById('selectedSlotId').value = slotId;
-    tableContainer.classList.add('hidden');
-    calendarContainer.classList.add('hidden');
-    bookingSection.classList.remove('hidden');
-  };
+// Statische Dateien bereitstellen
+app.use(express.static(path.join(__dirname, 'public')));
 
-  // Lade nur freie Slots vom Server
-  async function loadSlots() {
-    try {
-      const response = await fetch('/slots'); // <--- Passe ggf. zu /api/slots an
-      if (!response.ok) throw new Error(`Serverantwort: ${response.status}`);
-      
-      const slots = await response.json();
+// 🔐 Admin-Login konfigurieren
+const adminAuth = basicAuth({
+  users: { 'ksanispl': 'Katana@1998' },
+  challenge: true,
+  unauthorizedResponse: () => 'Zugriff verweigert – Adminbereich geschützt.',
+});
 
-      // Tabelle leeren
-      tableBody.innerHTML = '';
+// 🔐 Admin-Bereiche absichern
+app.use([
+  '/admin.html',
+  '/admin-table.html',
+  '/admin-view.html',
+  '/admin/bookings',
+  '/admin/slots',
+  '/admin/bookings/export',
+  '/admin/delete',
+  '/add-slot',
+  '/add-series'
+], adminAuth);
 
-      if (slots.length === 0) {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td colspan="2">⚠️ Keine verfügbaren Termine.</td>`;
-        tableBody.appendChild(tr);
-        calendarContainer.innerHTML = '<p>⚠️ Keine Termine verfügbar.</p>';
-        return;
-      }
-
-      // Tabelle füllen
-      slots.forEach(slot => {
-        const tr = document.createElement('tr');
-        tr.className = slot.booked ? 'booked' : 'free';
-        tr.innerHTML = `
-          <td>${new Date(slot.datetime).toLocaleString('de-DE')}</td>
-          <td>
-            ${slot.booked ? 'Gebucht' : `<button onclick="showBookingForm(${slot.id})">Buchen</button>`}
-          </td>
-        `;
-        tableBody.appendChild(tr);
-      });
-
-      // Kalender füllen
-      calendarContainer.innerHTML = '';
-      slots.forEach(slot => {
-        const div = document.createElement('div');
-        div.className = `calendar-day ${slot.booked ? 'booked' : 'free'}`;
-        div.innerHTML = `
-          <strong>${new Date(slot.datetime).toLocaleDateString('de-DE')}</strong><br>
-          ${new Date(slot.datetime).toLocaleTimeString('de-DE')}<br>
-          ${!slot.booked ? `<button onclick="showBookingForm(${slot.id})">Buchen</button>` : 'Gebucht'}
-        `;
-        calendarContainer.appendChild(div);
-      });
-    } catch (err) {
-      console.error('Fehler beim Laden der Slots:', err);
-      alert('❌ Fehler beim Laden der Daten. Bitte versuche es später erneut.');
-    }
+// 📦 Datenbankverbindung
+const db = new sqlite3.Database('./database.sqlite', (err) => {
+  if (err) {
+    console.error('❌ Fehler beim Verbinden zur Datenbank:', err.message);
+  } else {
+    console.log('📦 Verbunden mit SQLite-Datenbank.');
   }
+});
 
-  // Formular absenden
-  bookingForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const data = {
-      slotId: document.getElementById('selectedSlotId').value,
-      name: `${document.getElementById('firstName').value} ${document.getElementById('lastName').value}`,
-      email: document.getElementById('email').value,
-      phone: document.getElementById('phone').value,
-      height: document.getElementById('height').value,
-      weight: document.getElementById('weight').value,
-    };
+// 📋 Tabellen anlegen (ohne Dummy-Termine)
+db.serialize(() => {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS slots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      datetime TEXT NOT NULL,
+      booked INTEGER DEFAULT 0
+    )
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS bookings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slotId INTEGER,
+      name TEXT,
+      email TEXT,
+      phone TEXT,
+      height INTEGER,
+      weight INTEGER,
+      createdAt TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+});
 
-    if (!data.slotId || !data.name.trim() || !data.email || !data.phone || !data.height || !data.weight) {
-      alert("❗ Bitte alle Felder ausfüllen.");
-      return;
+// 📅 Alle Slots abrufen
+app.get('/slots', (req, res) => {
+  db.all('SELECT * FROM slots ORDER BY datetime ASC', [], (err, rows) => {
+    if (err) {
+      console.error('❌ Fehler beim Abrufen der Slots:', err.message);
+      res.status(500).json({ error: 'Fehler beim Abrufen der Slots' });
+    } else {
+      res.json(rows);
+    }
+  });
+});
+
+// 📝 Termin buchen
+app.post('/api/book', (req, res) => {
+  const { slotId, name, email, phone, height, weight } = req.body;
+
+  db.run('INSERT INTO bookings (slotId, name, email, phone, height, weight) VALUES (?, ?, ?, ?, ?, ?)',
+    [slotId, name, email, phone, height, weight],
+    function (err) {
+      if (err) {
+        console.error('❌ Fehler bei Buchung:', err.message);
+        res.status(500).json({ error: 'Fehler bei der Buchung' });
+      } else {
+        db.run('UPDATE slots SET booked = 1 WHERE id = ?', [slotId]);
+        res.json({ message: '✅ Buchung erfolgreich', bookingId: this.lastID });
+      }
+    });
+});
+
+// 📋 Buchungen abrufen (Admin)
+app.get('/admin/bookings', (req, res) => {
+  db.all(`
+    SELECT bookings.*, slots.datetime FROM bookings
+    JOIN slots ON bookings.slotId = slots.id
+    ORDER BY slots.datetime ASC
+  `, [], (err, rows) => {
+    if (err) {
+      console.error('❌ Fehler beim Abrufen der Buchungen:', err.message);
+      res.status(500).json({ error: 'Fehler beim Abrufen der Buchungen' });
+    } else {
+      res.json(rows);
+    }
+  });
+});
+
+// ➕ Einzel-Slot hinzufügen
+app.post('/add-slot', (req, res) => {
+  const { datetime } = req.body;
+  db.run('INSERT INTO slots (datetime, booked) VALUES (?, 0)', [datetime], function (err) {
+    if (err) {
+      console.error('❌ Fehler beim Hinzufügen des Slots:', err.message);
+      res.status(500).json({ error: 'Fehler beim Slot-Hinzufügen' });
+    } else {
+      res.json({ message: '✅ Slot hinzugefügt', slotId: this.lastID });
+    }
+  });
+});
+
+// ➕ Mehrere Slots in Serie hinzufügen
+app.post('/add-series', (req, res) => {
+  const { datetimes } = req.body;
+  const stmt = db.prepare('INSERT INTO slots (datetime, booked) VALUES (?, 0)');
+  datetimes.forEach(dt => stmt.run(dt));
+  stmt.finalize(err => {
+    if (err) {
+      console.error('❌ Fehler beim Serien-Insert:', err.message);
+      res.status(500).json({ error: 'Fehler bei Slot-Serienanlage' });
+    } else {
+      res.json({ message: '✅ Slots hinzugefügt' });
+    }
+  });
+});
+
+// ❌ Slot & Buchung löschen
+app.post('/admin/delete', (req, res) => {
+  const { slotId } = req.body;
+  db.run('DELETE FROM slots WHERE id = ?', [slotId], function (err) {
+    if (err) {
+      console.error('❌ Fehler beim Löschen:', err.message);
+      res.status(500).json({ error: 'Fehler beim Löschen' });
+    } else {
+      db.run('DELETE FROM bookings WHERE slotId = ?', [slotId]);
+      res.json({ message: '✅ Slot & Buchung gelöscht' });
+    }
+  });
+});
+
+// ⬇️ Buchungen als Excel exportieren
+app.get('/admin/bookings/export', async (req, res) => {
+  db.all(`
+    SELECT bookings.*, slots.datetime FROM bookings
+    JOIN slots ON bookings.slotId = slots.id
+    ORDER BY slots.datetime ASC
+  `, [], async (err, rows) => {
+    if (err) {
+      console.error('❌ Fehler beim Export:', err.message);
+      return res.status(500).send('Export-Fehler');
     }
 
-    const res = await fetch('/api/book', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Buchungen');
 
-    const result = await res.json();
-    status.textContent = result.message;
-    bookingForm.reset();
-    await loadSlots(); // aktualisiere Anzeige
+    worksheet.columns = [
+      { header: 'Datum/Zeit', key: 'datetime', width: 20 },
+      { header: 'Name', key: 'name', width: 20 },
+      { header: 'E-Mail', key: 'email', width: 25 },
+      { header: 'Telefon', key: 'phone', width: 15 },
+      { header: 'Größe (cm)', key: 'height', width: 15 },
+      { header: 'Gewicht (kg)', key: 'weight', width: 15 },
+      { header: 'Buchungszeitpunkt', key: 'createdAt', width: 20 },
+    ];
+
+    rows.forEach(row => worksheet.addRow(row));
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="buchungen.xlsx"');
+
+    await workbook.xlsx.write(res);
+    res.end();
   });
+});
 
-  backButton.addEventListener('click', () => {
-    bookingSection.classList.add('hidden');
-    tableContainer.classList.remove('hidden');
-    status.textContent = '';
-  });
-
-  toggleTableBtn.addEventListener('click', () => {
-    tableContainer.classList.remove('hidden');
-    calendarContainer.classList.add('hidden');
-    bookingSection.classList.add('hidden');
-  });
-
-  toggleCalendarBtn.addEventListener('click', () => {
-    tableContainer.classList.add('hidden');
-    calendarContainer.classList.remove('hidden');
-    bookingSection.classList.add('hidden');
-  });
-
-  await loadSlots();
+// 🌐 Server starten
+app.listen(PORT, () => {
+  console.log(`🚀 Server läuft auf http://localhost:${PORT}`);
 });
