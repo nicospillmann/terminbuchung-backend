@@ -36,11 +36,14 @@ app.use([
 
 // 📦 SQLite DB-Verbindung
 const db = new sqlite3.Database('./database.sqlite', (err) => {
-  if (err) console.error('❌ Fehler bei DB-Verbindung:', err.message);
-  else console.log('✅ Verbunden mit SQLite-Datenbank');
+  if (err) {
+    console.error('❌ Fehler beim Verbinden zur SQLite-Datenbank:', err.message);
+  } else {
+    console.log('📦 Verbunden mit SQLite-Datenbank.');
+  }
 });
 
-// Tabellen anlegen + Dummy-Slots
+// Tabellen anlegen
 db.serialize(() => {
   db.run(`
     CREATE TABLE IF NOT EXISTS slots (
@@ -61,193 +64,130 @@ db.serialize(() => {
       createdAt TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
+});
 
-  db.get("SELECT COUNT(*) AS count FROM slots", (err, row) => {
-    if (!err && row.count === 0) {
-      const stmt = db.prepare("INSERT INTO slots (datetime, booked) VALUES (?, 0)");
-      const now = new Date();
-      for (let i = 1; i <= 5; i++) {
-        const date = new Date(now.getTime() + i * 3600000);
-        stmt.run(date.toISOString());
-      }
-      stmt.finalize(() => console.log("✅ Dummy-Slots eingefügt."));
+// 📅 Alle verfügbaren Slots abrufen
+app.get('/slots', (req, res) => {
+  db.all('SELECT * FROM slots ORDER BY datetime ASC', [], (err, rows) => {
+    if (err) {
+      console.error('❌ Fehler beim Abrufen der Slots:', err.message);
+      res.status(500).json({ error: 'Fehler beim Abrufen der Slots' });
+    } else {
+      res.json(rows);
     }
   });
 });
 
-// Öffentliche API: Verfügbare Slots
-app.get('/api/slots', (req, res) => {
-  db.all("SELECT * FROM slots WHERE booked = 0", (err, rows) => {
-    if (err) return res.status(500).json({ error: 'Fehler beim Abrufen' });
-    res.json(rows);
-  });
-});
-
-// Buchung eines Slots
-app.post('/api/book', (req, res) => {
+// 📋 Buchung eines Termins
+app.post('/book', (req, res) => {
   const { slotId, name, email, phone, height, weight } = req.body;
-
-  if (!slotId || !name || !email || !phone || !height || !weight) {
-    return res.status(400).json({ message: 'Alle Buchungsfelder müssen ausgefüllt sein' });
-  }
-
-  db.serialize(() => {
-    db.run("UPDATE slots SET booked = 1 WHERE id = ?", [slotId], function (err) {
-      if (err || this.changes === 0) {
-        return res.status(500).json({ message: 'Fehler bei der Buchung' });
+  db.run('INSERT INTO bookings (slotId, name, email, phone, height, weight) VALUES (?, ?, ?, ?, ?, ?)',
+    [slotId, name, email, phone, height, weight],
+    function (err) {
+      if (err) {
+        console.error('❌ Fehler beim Einfügen der Buchung:', err.message);
+        res.status(500).json({ error: 'Fehler bei der Buchung' });
+      } else {
+        db.run('UPDATE slots SET booked = 1 WHERE id = ?', [slotId]);
+        res.json({ message: '✅ Buchung erfolgreich', bookingId: this.lastID });
       }
-
-      db.run(`
-        INSERT INTO bookings (slotId, name, email, phone, height, weight)
-        VALUES (?, ?, ?, ?, ?, ?)`,
-        [slotId, name, email, phone, height, weight],
-        (err) => {
-          if (err) console.error('❌ Fehler beim Speichern:', err.message);
-        }
-      );
-
-      res.json({ message: '✅ Termin erfolgreich gebucht!' });
     });
-  });
 });
 
-// Admin: Alle Slots
-app.get('/admin/slots', (req, res) => {
-  db.all("SELECT * FROM slots ORDER BY datetime ASC", (err, rows) => {
-    if (err) return res.status(500).json({ error: 'Fehler beim Abrufen' });
-    res.json(rows);
-  });
-});
-
-// Admin: Buchungen
+// 📋 Alle Buchungen anzeigen (Admin)
 app.get('/admin/bookings', (req, res) => {
-  db.all("SELECT * FROM bookings ORDER BY createdAt DESC", (err, rows) => {
-    if (err) return res.status(500).json({ error: 'Fehler beim Abrufen' });
-    res.json(rows);
+  db.all(`
+    SELECT bookings.*, slots.datetime FROM bookings
+    JOIN slots ON bookings.slotId = slots.id
+    ORDER BY slots.datetime ASC
+  `, [], (err, rows) => {
+    if (err) {
+      console.error('❌ Fehler beim Abrufen der Buchungen:', err.message);
+      res.status(500).json({ error: 'Fehler beim Abrufen der Buchungen' });
+    } else {
+      res.json(rows);
+    }
   });
 });
 
-// Excel-Export
-app.get('/admin/bookings/export', async (req, res) => {
-  const query = `
-    SELECT 
-      bookings.name, bookings.email, bookings.phone,
-      bookings.height, bookings.weight, bookings.createdAt,
-      slots.datetime AS slotTime
-    FROM bookings
-    JOIN slots ON bookings.slotId = slots.id
-    ORDER BY bookings.createdAt DESC
-  `;
+// ➕ Einzelnen Slot hinzufügen
+app.post('/add-slot', (req, res) => {
+  const { datetime } = req.body;
+  db.run('INSERT INTO slots (datetime, booked) VALUES (?, 0)', [datetime], function (err) {
+    if (err) {
+      console.error('❌ Fehler beim Hinzufügen des Slots:', err.message);
+      res.status(500).json({ error: 'Fehler beim Hinzufügen des Slots' });
+    } else {
+      res.json({ message: '✅ Slot hinzugefügt', slotId: this.lastID });
+    }
+  });
+});
 
-  db.all(query, async (err, rows) => {
-    if (err) return res.status(500).json({ error: 'Fehler beim Exportieren' });
+// ➕ Mehrere Slots in Serie hinzufügen
+app.post('/add-series', (req, res) => {
+  const { datetimes } = req.body; // Array von Datumsstrings
+  const stmt = db.prepare('INSERT INTO slots (datetime, booked) VALUES (?, 0)');
+  datetimes.forEach(datetime => stmt.run(datetime));
+  stmt.finalize(err => {
+    if (err) {
+      console.error('❌ Fehler beim Hinzufügen mehrerer Slots:', err.message);
+      res.status(500).json({ error: 'Fehler beim Hinzufügen der Slots' });
+    } else {
+      res.json({ message: '✅ Slots hinzugefügt' });
+    }
+  });
+});
+
+// ❌ Slot löschen
+app.post('/admin/delete', (req, res) => {
+  const { slotId } = req.body;
+  db.run('DELETE FROM slots WHERE id = ?', [slotId], function (err) {
+    if (err) {
+      console.error('❌ Fehler beim Löschen:', err.message);
+      res.status(500).json({ error: 'Fehler beim Löschen' });
+    } else {
+      db.run('DELETE FROM bookings WHERE slotId = ?', [slotId]);
+      res.json({ message: '✅ Slot gelöscht' });
+    }
+  });
+});
+
+// ⬇️ Export als Excel-Datei
+app.get('/admin/bookings/export', async (req, res) => {
+  db.all(`
+    SELECT bookings.*, slots.datetime FROM bookings
+    JOIN slots ON bookings.slotId = slots.id
+    ORDER BY slots.datetime ASC
+  `, [], async (err, rows) => {
+    if (err) {
+      console.error('❌ Fehler beim Exportieren:', err.message);
+      return res.status(500).send('Fehler beim Exportieren');
+    }
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Buchungen');
 
     worksheet.columns = [
+      { header: 'Datum/Zeit', key: 'datetime', width: 20 },
       { header: 'Name', key: 'name', width: 20 },
       { header: 'E-Mail', key: 'email', width: 25 },
-      { header: 'Telefon', key: 'phone', width: 18 },
-      { header: 'Größe (cm)', key: 'height', width: 12 },
-      { header: 'Gewicht (kg)', key: 'weight', width: 12 },
-      { header: 'Slot-Zeit', key: 'slotTime', width: 22 },
-      { header: 'Buchungszeit', key: 'createdAt', width: 22 }
+      { header: 'Telefon', key: 'phone', width: 15 },
+      { header: 'Größe (cm)', key: 'height', width: 15 },
+      { header: 'Gewicht (kg)', key: 'weight', width: 15 },
+      { header: 'Buchungszeitpunkt', key: 'createdAt', width: 20 },
     ];
 
-    function formatGermanDate(dateString) {
-      const d = new Date(dateString);
-      const pad = n => n.toString().padStart(2, '0');
-      return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-    }
-
-    rows.forEach(row => {
-      row.slotTime = formatGermanDate(row.slotTime);
-      row.createdAt = formatGermanDate(row.createdAt);
-      worksheet.addRow(row);
-    });
-
-    worksheet.getRow(1).eachCell(cell => {
-      cell.font = { bold: true };
-      cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFCCE5FF' }
-      };
-      cell.border = {
-        top: { style: 'thin' },
-        bottom: { style: 'thin' }
-      };
-    });
+    rows.forEach(row => worksheet.addRow(row));
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="buchungen.xlsx"');
+
     await workbook.xlsx.write(res);
     res.end();
   });
 });
 
-// Slot hinzufügen
-app.post('/add-slot', (req, res) => {
-  const { datetime, count } = req.body;
-  const slotCount = parseInt(count) || 1;
-
-  if (!datetime) return res.status(400).json({ message: 'Kein Datum übergeben' });
-
-  const stmt = db.prepare("INSERT INTO slots (datetime, booked) VALUES (?, 0)");
-  for (let i = 0; i < slotCount; i++) {
-    stmt.run(datetime);
-  }
-  stmt.finalize((err) => {
-    if (err) return res.status(500).json({ message: 'Fehler beim Hinzufügen' });
-    res.json({ message: `${slotCount} Slot(s) hinzugefügt` });
-  });
-});
-
-// Serientermine hinzufügen
-app.post('/add-series', (req, res) => {
-  const { startDate, time, days, count } = req.body;
-  if (!startDate || !time || !days || !count) return res.status(400).json({ message: 'Ungültige Daten' });
-
-  const stmt = db.prepare("INSERT INTO slots (datetime, booked) VALUES (?, 0)");
-
-  for (let i = 0; i < days; i++) {
-    const date = new Date(`${startDate}T${time}`);
-    date.setDate(date.getDate() + i);
-    for (let j = 0; j < count; j++) {
-      stmt.run(date.toISOString());
-    }
-  }
-
-  stmt.finalize((err) => {
-    if (err) return res.status(500).json({ message: 'Fehler bei Serienterminen' });
-    res.json({ message: 'Serientermine hinzugefügt' });
-  });
-});
-
-// Slots löschen
-app.post('/admin/delete', (req, res) => {
-  const { ids } = req.body;
-  if (!ids || !Array.isArray(ids)) {
-    return res.status(400).json({ message: 'Ungültige ID-Liste' });
-  }
-
-  const placeholders = ids.map(() => '?').join(',');
-
-  db.serialize(() => {
-    db.run(`DELETE FROM bookings WHERE slotId IN (${placeholders})`, ids, (err) => {
-      if (err) return res.status(500).json({ message: 'Fehler beim Löschen der Buchungen' });
-
-      db.run(`DELETE FROM slots WHERE id IN (${placeholders})`, ids, function (err) {
-        if (err) return res.status(500).json({ message: 'Fehler beim Löschen der Slots' });
-        res.json({ message: 'Termine & Buchungen gelöscht' });
-      });
-    });
-  });
-});
-
-// Server starten
+// 🌐 Server starten
 app.listen(PORT, () => {
-  console.log(`🚀 Server läuft auf Port ${PORT}`);
+  console.log(`🚀 Server läuft auf http://localhost:${PORT}`);
 });
