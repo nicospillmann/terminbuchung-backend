@@ -21,37 +21,52 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Lade nur freie Slots vom Server
   async function loadSlots() {
-    const response = await fetch('/api/slots'); // ✅ Öffentliche Route ohne Auth
-    const slots = await response.json();
+    try {
+      const response = await fetch('/slots'); // <--- Passe ggf. zu /api/slots an
+      if (!response.ok) throw new Error(`Serverantwort: ${response.status}`);
+      
+      const slots = await response.json();
 
-    // Tabelle leeren
-    tableBody.innerHTML = '';
+      // Tabelle leeren
+      tableBody.innerHTML = '';
 
-    // Tabelle füllen
-    slots.forEach(slot => {
-      const tr = document.createElement('tr');
-      tr.className = slot.booked ? 'booked' : 'free';
-      tr.innerHTML = `
-        <td>${new Date(slot.datetime).toLocaleString('de-DE')}</td>
-        <td>
-          ${slot.booked ? 'Gebucht' : `<button onclick="showBookingForm(${slot.id})">Buchen</button>`}
-        </td>
-      `;
-      tableBody.appendChild(tr);
-    });
+      if (slots.length === 0) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td colspan="2">⚠️ Keine verfügbaren Termine.</td>`;
+        tableBody.appendChild(tr);
+        calendarContainer.innerHTML = '<p>⚠️ Keine Termine verfügbar.</p>';
+        return;
+      }
 
-    // Kalender füllen
-    calendarContainer.innerHTML = '';
-    slots.forEach(slot => {
-      const div = document.createElement('div');
-      div.className = `calendar-day ${slot.booked ? 'booked' : 'free'}`;
-      div.innerHTML = `
-        <strong>${new Date(slot.datetime).toLocaleDateString('de-DE')}</strong><br>
-        ${new Date(slot.datetime).toLocaleTimeString('de-DE')}<br>
-        ${!slot.booked ? `<button onclick="showBookingForm(${slot.id})">Buchen</button>` : 'Gebucht'}
-      `;
-      calendarContainer.appendChild(div);
-    });
+      // Tabelle füllen
+      slots.forEach(slot => {
+        const tr = document.createElement('tr');
+        tr.className = slot.booked ? 'booked' : 'free';
+        tr.innerHTML = `
+          <td>${new Date(slot.datetime).toLocaleString('de-DE')}</td>
+          <td>
+            ${slot.booked ? 'Gebucht' : `<button onclick="showBookingForm(${slot.id})">Buchen</button>`}
+          </td>
+        `;
+        tableBody.appendChild(tr);
+      });
+
+      // Kalender füllen
+      calendarContainer.innerHTML = '';
+      slots.forEach(slot => {
+        const div = document.createElement('div');
+        div.className = `calendar-day ${slot.booked ? 'booked' : 'free'}`;
+        div.innerHTML = `
+          <strong>${new Date(slot.datetime).toLocaleDateString('de-DE')}</strong><br>
+          ${new Date(slot.datetime).toLocaleTimeString('de-DE')}<br>
+          ${!slot.booked ? `<button onclick="showBookingForm(${slot.id})">Buchen</button>` : 'Gebucht'}
+        `;
+        calendarContainer.appendChild(div);
+      });
+    } catch (err) {
+      console.error('Fehler beim Laden der Slots:', err);
+      alert('❌ Fehler beim Laden der Daten. Bitte versuche es später erneut.');
+    }
   }
 
   // Formular absenden
