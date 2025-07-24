@@ -3,74 +3,38 @@
 <head>
   <meta charset="UTF-8">
   <title>Termin buchen</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="./style.css" />
   <style>
     .hidden { display: none; }
-    .info-message {
-      margin-top: 2rem;
-      padding: 1rem;
-      background-color: #f0f0f0;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      font-size: 1.2rem;
-      color: #444;
-    }
+    .info-message { color: green; }
+    .error-message { color: red; }
   </style>
 </head>
 <body>
-  <h1>📝 Terminbuchung</h1>
-
-  <div id="noSlotsMessage" class="info-message hidden">
-    Aktuell sind keine Termine verfügbar. Bitte schaue später wieder vorbei.
+  <h1>Online-Terminbuchung</h1>
+  <div id="slotTableContainer">
+    <table>
+      <thead><tr><th>Datum</th><th>Status</th></tr></thead>
+      <tbody id="slotTableBody"></tbody>
+    </table>
   </div>
 
-  <form id="bookingForm">
-    <input type="hidden" id="slotId" />
-    <label>Name: <input type="text" id="name" required /></label><br />
-    <label>E-Mail: <input type="email" id="email" required /></label><br />
-    <label>Telefon: <input type="text" id="phone" required /></label><br />
-    <label>Größe (cm): <input type="number" id="height" required /></label><br />
-    <label>Gewicht (kg): <input type="number" id="weight" required /></label><br />
-    <button type="submit">Termin buchen</button>
-  </form>
+  <div id="calendarContainer" class="hidden"></div>
+  <section id="bookingSection" class="hidden">
+    <form id="bookingForm">
+      <input type="hidden" id="selectedSlotId" />
+      <input type="text" id="firstName" placeholder="Vorname" required />
+      <input type="text" id="lastName" placeholder="Nachname" required />
+      <input type="email" id="email" placeholder="E-Mail" required />
+      <input type="text" id="phone" placeholder="Telefonnummer" required />
+      <input type="number" id="height" placeholder="Größe (cm)" required />
+      <input type="number" id="weight" placeholder="Gewicht (kg)" required />
+      <button type="submit">Buchen</button>
+    </form>
+    <p id="status"></p>
+    <button id="backButton">Zurück</button>
+  </section>
 
-  <script>
-    const params = new URLSearchParams(window.location.search);
-    const slotId = params.get('slotId');
-
-    if (!slotId) {
-      document.getElementById("bookingForm").classList.add("hidden");
-      document.getElementById("noSlotsMessage").classList.remove("hidden");
-    } else {
-      document.getElementById("slotId").value = slotId;
-    }
-
-    // Formular absenden
-    document.getElementById("bookingForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
-
-      const data = {
-        slotId: document.getElementById("slotId").value,
-        name: document.getElementById("name").value,
-        email: document.getElementById("email").value,
-        phone: document.getElementById("phone").value,
-        height: document.getElementById("height").value,
-        weight: document.getElementById("weight").value
-      };
-
-      const res = await fetch("/api/book", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data)
-      });
-
-      if (res.ok) {
-        alert("Buchung erfolgreich!");
-        window.location.href = "/index.html";
-      } else {
-        alert("Fehler bei der Buchung.");
-      }
-    });
-  </script>
+  <script src="./script.js"></script>
 </body>
 </html>
